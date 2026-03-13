@@ -1,55 +1,61 @@
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * book_my_stay - Hotel Booking Management System
- * Use Case 2: Basic Room Types & Static Availability
- * * @author gayatrik0027
- * @version 2.0
+ * Use Case 3: Centralized Room Inventory Management
+ * @author gayatrik0027
+ * @version 3.0
  */
 
-// Abstract Class representing the general concept of a Room
-abstract class book_my_stay {
+// Abstract Class from UC2
+abstract class Room {
     protected String roomType;
-    protected int beds;
     protected double price;
 
-    public Room(String roomType, int beds, double price) {
+    public Room(String roomType, double price) {
         this.roomType = roomType;
-        this.beds = beds;
         this.price = price;
     }
 
     public abstract void displayDetails();
 }
 
-// Concrete Class for Single Room
 class SingleRoom extends Room {
-    public SingleRoom() {
-        super("Single Room", 1, 1000.0);
-    }
-    @Override
-    public void displayDetails() {
-        System.out.println(roomType + " | Beds: " + beds + " | Price: Rs." + price);
-    }
+    public SingleRoom() { super("Single", 1000.0); }
+    public void displayDetails() { System.out.println(roomType + " Room | Price: Rs." + price); }
 }
 
-// Concrete Class for Double Room
 class DoubleRoom extends Room {
-    public DoubleRoom() {
-        super("Double Room", 2, 1800.0);
-    }
-    @Override
-    public void displayDetails() {
-        System.out.println(roomType + " | Beds: " + beds + " | Price: Rs." + price);
-    }
+    public DoubleRoom() { super("Double", 1800.0); }
+    public void displayDetails() { System.out.println(roomType + " Room | Price: Rs." + price); }
 }
 
-// Concrete Class for Suite Room
-class SuiteRoom extends Room {
-    public SuiteRoom() {
-        super("Suite Room", 3, 3500.0);
+// --- NEW INVENTORY COMPONENT ---
+class RoomInventory {
+    // HashMap to store roomType -> availableCount
+    private Map<String, Integer> inventory;
+
+    public RoomInventory() {
+        inventory = new HashMap<>();
     }
-    @Override
-    public void displayDetails() {
-        System.out.println(roomType + " | Beds: " + beds + " | Price: Rs." + price);
+
+    // Method to register/add rooms to inventory
+    public void addRooms(String type, int count) {
+        inventory.put(type, count);
+    }
+
+    // Method to check availability
+    public int getAvailability(String type) {
+        return inventory.getOrDefault(type, 0);
+    }
+
+    // Method to display the whole inventory
+    public void displayInventory() {
+        System.out.println("Current Inventory Status:");
+        for (Map.Entry<String, Integer> entry : inventory.entrySet()) {
+            System.out.println("- " + entry.getKey() + " Rooms: " + entry.getValue() + " available");
+        }
     }
 }
 
@@ -57,30 +63,22 @@ public class book_my_stay {
     public static void main(String[] args) {
         System.out.println("==========================================");
         System.out.println("      Welcome to Book My Stay App         ");
-        System.out.println("            Version: 2.0                  ");
+        System.out.println("            Version: 3.0                  ");
         System.out.println("==========================================");
 
-        // Initializing Room Objects (Polymorphism)
-        Room single = new SingleRoom();
-        Room dbl = new DoubleRoom();
-        Room suite = new SuiteRoom();
+        // Initialize Inventory
+        RoomInventory hotelInventory = new RoomInventory();
 
-        // Static Availability Variables
-        int singleAvailable = 5;
-        int doubleAvailable = 3;
-        int suiteAvailable = 2;
+        // Registering room types with their counts
+        hotelInventory.addRooms("Single", 10);
+        hotelInventory.addRooms("Double", 5);
+        hotelInventory.addRooms("Suite", 2);
 
-        // Display Room Details and Availability
-        System.out.println("Available Room Types:");
-        single.displayDetails();
-        System.out.println("  Availability: " + singleAvailable);
+        // Displaying current state
+        hotelInventory.displayInventory();
 
-        dbl.displayDetails();
-        System.out.println("  Availability: " + doubleAvailable);
-
-        suite.displayDetails();
-        System.out.println("  Availability: " + suiteAvailable);
-
+        System.out.println("==========================================");
+        System.out.println("Check: Availability for Double Rooms is " + hotelInventory.getAvailability("Double"));
         System.out.println("==========================================");
     }
 }
