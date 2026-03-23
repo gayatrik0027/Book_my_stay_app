@@ -1,61 +1,46 @@
 import java.util.*;
 
+// Reservation class
+class Reservation {
+    String guestName;
+    String roomType;
+
+    public Reservation(String guestName, String roomType) {
+        this.guestName = guestName;
+        this.roomType = roomType;
+    }
+
+    public String toString() {
+        return guestName + " requested " + roomType;
+    }
+}
+
 public class app {
 
-    // Simulated inventory (roomType -> available count)
-    static Map<String, Integer> inventory = new HashMap<>();
-
-    // roomType -> set of allocated room IDs
-    static Map<String, Set<String>> allocatedRooms = new HashMap<>();
-
-    // Queue for booking requests (FIFO)
-    static Queue<String> bookingQueue = new LinkedList<>();
+    // FIFO Queue
+    static Queue<Reservation> bookingQueue = new LinkedList<>();
 
     public static void main(String[] args) {
 
-        // Initialize inventory
-        inventory.put("DELUXE", 2);
-        inventory.put("STANDARD", 1);
+        addRequest("Prabhu", "DELUXE");
+        addRequest("Arun", "STANDARD");
+        addRequest("Divya", "DELUXE");
 
-        // Add booking requests to queue
-        bookingQueue.add("DELUXE");
-        bookingQueue.add("DELUXE");
-        bookingQueue.add("STANDARD");
-        bookingQueue.add("DELUXE"); // should fail (no rooms left)
-
-        processBookings();
+        showQueue();
     }
 
-    // Process booking requests
-    public static void processBookings() {
-        while (!bookingQueue.isEmpty()) {
-            String roomType = bookingQueue.poll();
+    // Add booking request
+    public static void addRequest(String guestName, String roomType) {
+        Reservation r = new Reservation(guestName, roomType);
+        bookingQueue.add(r);
+        System.out.println("Request Added: " + r);
+    }
 
-            synchronized (App.class) { // atomic block
-
-                int available = inventory.getOrDefault(roomType, 0);
-
-                if (available > 0) {
-                    String roomId = generateRoomId(roomType);
-
-                    // Ensure uniqueness using Set
-                    allocatedRooms
-                            .computeIfAbsent(roomType, k -> new HashSet<>())
-                            .add(roomId);
-
-                    // Decrement inventory immediately
-                    inventory.put(roomType, available - 1);
-
-                    System.out.println("Reservation Confirmed: " + roomType + " -> " + roomId);
-                } else {
-                    System.out.println("Reservation Failed (No Availability): " + roomType);
-                }
-            }
+    // Display queue (FIFO order)
+    public static void showQueue() {
+        System.out.println("\nBooking Queue:");
+        for (Reservation r : bookingQueue) {
+            System.out.println(r);
         }
-    }
-
-    // Generate unique room ID
-    public static String generateRoomId(String roomType) {
-        return roomType + "-" + UUID.randomUUID().toString().substring(0, 6);
     }
 }
