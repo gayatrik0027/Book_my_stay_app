@@ -1,83 +1,106 @@
+import java.io.*;
 import java.util.*;
 
-// 1. Policy Interface: The contract for all business rules
-interface BookingPolicy {
-    boolean isAllowed(String guestType, int duration, double totalCost);
-    String getFailureMessage();
-}
+// --- 1. DOMAIN MODELS ---
+class Booking implements Serializable {
+    private static final long serialVersionUID = 1L;
+    public String id;
+    public String roomType;
+    public boolean isCancelled = false;
 
-// 2. Concrete Policy: Minimum Stay Rule
-class MinimumStayPolicy implements BookingPolicy {
-    private final int minDays = 2;
-
-    @Override
-    public boolean isAllowed(String guestType, int duration, double totalCost) {
-        return duration >= minDays;
-    }
-
-    @Override
-    public String getFailureMessage() {
-        return "Business Rule Violation: Minimum stay is " + minDays + " nights.";
+    public Booking(String id, String roomType) {
+        this.id = id;
+        this.roomType = roomType;
     }
 }
 
-// 3. Concrete Policy: VIP Credit Check
-class CreditLimitPolicy implements BookingPolicy {
-    private final double maxCredit = 1000.0;
-
-    @Override
-    public boolean isAllowed(String guestType, int duration, double totalCost) {
-        // Standard guests cannot book over the credit limit
-        if (guestType.equalsIgnoreCase("STANDARD") && totalCost > maxCredit) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
-    public String getFailureMessage() {
-        return "Business Rule Violation: Cost exceeds credit limit for Standard guests.";
-    }
+// --- 2. CUSTOM EXCEPTIONS ---
+class BookingException extends Exception {
+    public BookingException(String message) { super(message); }
 }
 
-// 4. BRP Manager: Evaluates all active policies
-class BusinessRuleProcessor {
-    private final List<BookingPolicy> policies = new ArrayList<>();
-
-    public void addPolicy(BookingPolicy policy) {
-        policies.add(policy);
-    }
-
-    public boolean validatePolicies(String guestType, int duration, double cost) {
-        for (BookingPolicy policy : policies) {
-            if (!policy.isAllowed(guestType, duration, cost)) {
-                System.err.println(policy.getFailureMessage());
-                return false; // Fail-Fast on first policy violation
-            }
-        }
-        return true;
-    }
-}
-
-// 5. Main Application Class
+// --- 3. THE CORE ENGINE (APP) ---
 public class App {
+    private static final String SAVE_FILE = "system_state.ser";
+    private Map<String, Integer> inventory = new HashMap<>();
+    private List<Booking> history = new ArrayList<>();
+
     public static void main(String[] args) {
-        BusinessRuleProcessor brp = new BusinessRuleProcessor();
+        App hotelSystem = new App();
+        hotelSystem.run();
+    }
 
-        // Registering Business Rules
-        brp.addPolicy(new MinimumStayPolicy());
-        brp.addPolicy(new CreditLimitPolicy());
+    public void run() {
+        // LOAD: Recovery Logic
+        loadFromDisk();
 
-        System.out.println("--- Scenario 1: Short Stay (1 Night) ---");
-        boolean canBook1 = brp.validatePolicies("STANDARD", 1, 150.0);
-        System.out.println("Result: " + (canBook1 ? "Approved" : "Rejected"));
+        // EXECUTE: Simulation of Business Logic
+        try {
+            System.out.println("--- Current Inventory: " + inventory + " ---");
 
-        System.out.println("\n--- Scenario 2: High Cost Standard Guest ---");
-        boolean canBook2 = brp.validatePolicies("STANDARD", 3, 1200.0);
-        System.out.println("Result: " + (canBook2 ? "Approved" : "Rejected"));
+            // Validate & Process
+            processNewBooking("BK-101", "DELUXE");
+            processNewBooking("BK-102", "DELUXE");
 
-        System.out.println("\n--- Scenario 3: VIP Guest High Cost ---");
-        boolean canBook3 = brp.validatePolicies("VIP", 3, 1500.0);
-        System.out.println("Result: " + (canBook3 ? "Approved" : "Rejected"));
+            // Test Cancellation
+            cancelBooking("BK-101");
+
+        } catch (BookingException e) {
+            System.err.println("VALIDATION ERROR: " + e.getMessage());
+        }
+
+        // SAVE: Persistence Logic
+        saveToDisk();
+        System.out.println("--- System Shutdown Cleanly ---");
+    }
+
+    // BUSINESS LOGIC with Validation (UC9)
+    private void processNewBooking(String id, String type) throws BookingException {
+        if (!inventory.containsKey(type) || inventory.get(type) <= 0) {
+            throw new BookingException("No inventory available for " + type);
+        }
+        inventory.put(type, inventory.get(type) - 1);
+        history.add(new Booking(id, type));
+        System.out.println("Confirmed: " + id);
+    }
+
+    // STATE REVERSAL (UC10)
+    private void cancelBooking(String id) throws BookingException {
+        Booking b = history.stream()
+                .filter(book -> book.id.equals(id) && !book.isCancelled)
+                .findFirst()
+                .orElseThrow(() -> new BookingException("Booking not found or already cancelled"));
+
+        b.isCancelled = true;
+        inventory.put(b.roomType, inventory.get(b.roomType) + 1);
+        System.out.println("Cancelled & Reverted: " + id);
+    }
+
+    // PERSISTENCE (UC12)
+    private void saveToDisk() {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(SAVE_FILE))) {
+            oos.writeObject(inventory);
+            oos.writeObject(history);
+            System.out.println("Data Saved.");
+        } catch (IOException e) {
+            System.err.println("Save Failed: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void loadFromDisk() {
+        File file = new File(SAVE_FILE);
+        if (!file.exists()) {
+            inventory.put("DELUXE", 5); // Default start state
+            return;
+        }
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(SAVE_FILE))) {
+            inventory = (Map<String, Integer>) ois.readObject();
+            history = (List<Booking>) ois.readObject();
+            System.out.println("Data Restored.");
+        } catch (Exception e) {
+            System.err.println("Recovery Failed. Starting fresh.");
+            inventory.put("DELUXE", 5);
+        }
     }
 }
