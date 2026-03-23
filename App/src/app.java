@@ -1,91 +1,83 @@
 import java.util.*;
 
-// 1. Represents a Booking record capable of being cancelled
-class Booking {
-    private String id;
-    private String roomType;
-    private String roomId;
-    private boolean isCancelled;
-
-    public Booking(String id, String roomType, String roomId) {
-        this.id = id;
-        this.roomType = roomType;
-        this.roomId = roomId;
-        this.isCancelled = false;
-    }
-
-    public String getId() { return id; }
-    public String getRoomType() { return roomType; }
-    public String getRoomId() { return roomId; }
-    public boolean isCancelled() { return isCancelled; }
-
-    public void markAsCancelled() { this.isCancelled = true; }
+// 1. Policy Interface: The contract for all business rules
+interface BookingPolicy {
+    boolean isAllowed(String guestType, int duration, double totalCost);
+    String getFailureMessage();
 }
 
-// 2. Cancellation Service: Manages the controlled rollback of system state
-class CancellationService {
-    // Stack used for LIFO Rollback: recently released rooms are tracked here
-    private Stack<String> releasedRoomIds = new Stack<>();
-    private Map<String, Integer> inventory; // Reference to core inventory
+// 2. Concrete Policy: Minimum Stay Rule
+class MinimumStayPolicy implements BookingPolicy {
+    private final int minDays = 2;
 
-    public CancellationService(Map<String, Integer> inventory) {
-        this.inventory = inventory;
+    @Override
+    public boolean isAllowed(String guestType, int duration, double totalCost) {
+        return duration >= minDays;
     }
 
-    // Controlled Mutation: Reversing state in a strict order
-    public void cancelBooking(Booking booking) throws Exception {
-        // 1. Validation: Ensure reservation exists and isn't already cancelled
-        if (booking == null || booking.isCancelled()) {
-            throw new Exception("Error: Invalid or already cancelled booking.");
+    @Override
+    public String getFailureMessage() {
+        return "Business Rule Violation: Minimum stay is " + minDays + " nights.";
+    }
+}
+
+// 3. Concrete Policy: VIP Credit Check
+class CreditLimitPolicy implements BookingPolicy {
+    private final double maxCredit = 1000.0;
+
+    @Override
+    public boolean isAllowed(String guestType, int duration, double totalCost) {
+        // Standard guests cannot book over the credit limit
+        if (guestType.equalsIgnoreCase("STANDARD") && totalCost > maxCredit) {
+            return false;
         }
-
-        System.out.println("Processing Cancellation for: " + booking.getId());
-
-        // 2. State Reversal: Record the allocated room ID in rollback structure
-        releasedRoomIds.push(booking.getRoomId());
-
-        // 3. Inventory Restoration: Increment count for the room type
-        String type = booking.getRoomType();
-        inventory.put(type, inventory.getOrDefault(type, 0) + 1);
-
-        // 4. Update Status: Finalize the state change
-        booking.markAsCancelled();
-
-        System.out.println("Success: Room " + booking.getRoomId() + " returned to pool.");
+        return true;
     }
 
-    public Stack<String> getReleasedRoomIds() {
-        return releasedRoomIds;
+    @Override
+    public String getFailureMessage() {
+        return "Business Rule Violation: Cost exceeds credit limit for Standard guests.";
     }
 }
 
-// 3. Main Application Class
+// 4. BRP Manager: Evaluates all active policies
+class BusinessRuleProcessor {
+    private final List<BookingPolicy> policies = new ArrayList<>();
+
+    public void addPolicy(BookingPolicy policy) {
+        policies.add(policy);
+    }
+
+    public boolean validatePolicies(String guestType, int duration, double cost) {
+        for (BookingPolicy policy : policies) {
+            if (!policy.isAllowed(guestType, duration, cost)) {
+                System.err.println(policy.getFailureMessage());
+                return false; // Fail-Fast on first policy violation
+            }
+        }
+        return true;
+    }
+}
+
+// 5. Main Application Class
 public class App {
     public static void main(String[] args) {
-        // Mock Inventory State
-        Map<String, Integer> currentInventory = new HashMap<>();
-        currentInventory.put("DELUXE", 5);
+        BusinessRuleProcessor brp = new BusinessRuleProcessor();
 
-        CancellationService cancellationService = new CancellationService(currentInventory);
+        // Registering Business Rules
+        brp.addPolicy(new MinimumStayPolicy());
+        brp.addPolicy(new CreditLimitPolicy());
 
-        // Scenario: A guest has a confirmed booking
-        Booking activeBooking = new Booking("BK-999", "DELUXE", "ROOM-101");
+        System.out.println("--- Scenario 1: Short Stay (1 Night) ---");
+        boolean canBook1 = brp.validatePolicies("STANDARD", 1, 150.0);
+        System.out.println("Result: " + (canBook1 ? "Approved" : "Rejected"));
 
-        System.out.println("Initial Inventory: " + currentInventory.get("DELUXE"));
+        System.out.println("\n--- Scenario 2: High Cost Standard Guest ---");
+        boolean canBook2 = brp.validatePolicies("STANDARD", 3, 1200.0);
+        System.out.println("Result: " + (canBook2 ? "Approved" : "Rejected"));
 
-        try {
-            // Perform Cancellation
-            cancellationService.cancelBooking(activeBooking);
-
-            // Verify Results
-            System.out.println("Updated Inventory: " + currentInventory.get("DELUXE"));
-            System.out.println("Last Released Room ID: " + cancellationService.getReleasedRoomIds().peek());
-
-            // Attempt Duplicate Cancellation (Validation Test)
-            cancellationService.cancelBooking(activeBooking);
-
-        } catch (Exception e) {
-            System.err.println("CANCELLATION FAILED: " + e.getMessage());
-        }
+        System.out.println("\n--- Scenario 3: VIP Guest High Cost ---");
+        boolean canBook3 = brp.validatePolicies("VIP", 3, 1500.0);
+        System.out.println("Result: " + (canBook3 ? "Approved" : "Rejected"));
     }
 }
